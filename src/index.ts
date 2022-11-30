@@ -8,23 +8,34 @@
  * Learn more at https://developers.cloudflare.com/workers/
  */
 
-export interface Env {
-	// Example binding to KV. Learn more at https://developers.cloudflare.com/workers/runtime-apis/kv/
-	// MY_KV_NAMESPACE: KVNamespace;
-	//
-	// Example binding to Durable Object. Learn more at https://developers.cloudflare.com/workers/runtime-apis/durable-objects/
-	// MY_DURABLE_OBJECT: DurableObjectNamespace;
-	//
-	// Example binding to R2. Learn more at https://developers.cloudflare.com/workers/runtime-apis/r2/
-	// MY_BUCKET: R2Bucket;
-}
+import { PrismaClient } from '@prisma/client/edge'
+const prisma = new PrismaClient()
 
-export default {
-	async fetch(
-		request: Request,
-		env: Env,
-		ctx: ExecutionContext
-	): Promise<Response> {
-		return new Response("Hello World!");
-	},
-};
+addEventListener('fetch', (event) => {
+  event.respondWith(handleEvent(event))
+})
+
+async function handleEvent(event: FetchEvent): Promise<Response> {
+  // Get URL parameters
+  const { request } = event
+  const url = new URL(request.url);
+  const table = url.searchParams.get('table');
+  let limit = url.searchParams.get('limit');
+  const limitNumber = limit? parseInt(limit): 100;
+
+  // Get model
+  let model
+  for (const [key, value] of Object.entries(prisma)) {
+    if (typeof value == 'object' && key == table) {
+      model = value
+      break
+    }
+  }
+  if(!model){
+    return new Response("Table not defined")
+  }
+
+  // Get data
+  const result = await model.findMany({ take: limitNumber })
+  return new Response(JSON.stringify({ result }))
+}
